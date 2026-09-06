@@ -29,7 +29,20 @@ class Settings(BaseSettings):
     app_password: str
 
     def get_postgres_kwargs(self) -> dict:
-        """Return psycopg connection kwargs, preferring DATABASE_URL if set."""
+        """Return psycopg connection kwargs.
+
+        Explicit POSTGRES_* variables take precedence so existing Coolify
+        deployments keep working even if the platform also injects DATABASE_URL.
+        If only DATABASE_URL is set (Railway's default), use that.
+        """
+        if self.postgres_host:
+            return {
+                "host": self.postgres_host,
+                "dbname": self.postgres_db,
+                "user": self.postgres_user,
+                "password": self.postgres_password,
+            }
+
         if self.database_url:
             parsed = urlparse(self.database_url)
             query = parse_qs(parsed.query)
@@ -44,18 +57,10 @@ class Settings(BaseSettings):
                 kwargs["sslmode"] = query["sslmode"][0]
             return kwargs
 
-        if not self.postgres_host:
-            raise ValueError(
-                "No Postgres configuration found. Set DATABASE_URL (Railway) "
-                "or POSTGRES_HOST/POSTGRES_DB/POSTGRES_USER/POSTGRES_PASSWORD."
-            )
-
-        return {
-            "host": self.postgres_host,
-            "dbname": self.postgres_db,
-            "user": self.postgres_user,
-            "password": self.postgres_password,
-        }
+        raise ValueError(
+            "No Postgres configuration found. Set DATABASE_URL (Railway) "
+            "or POSTGRES_HOST/POSTGRES_DB/POSTGRES_USER/POSTGRES_PASSWORD."
+        )
 
 
 @lru_cache
