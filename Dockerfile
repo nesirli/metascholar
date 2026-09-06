@@ -27,13 +27,15 @@ RUN uv pip install --no-deps .
 ENV PYTHON=python
 ENV STREAMLIT=streamlit
 
+# Railway injects PORT at runtime. Locally we default to 8501.
 ENV STREAMLIT_SERVER_PORT=8501
 ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
 
 EXPOSE 8501
 
 # Streamlit serves its health endpoint under the baseUrlPath, so include ROOT_PATH.
+# On Railway the app listens on $PORT; locally it falls back to STREAMLIT_SERVER_PORT.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
-    CMD python -c "import os,urllib.request,sys; p=os.environ.get('ROOT_PATH',''); sys.exit(0 if urllib.request.urlopen(f'http://localhost:8501{p}/_stcore/health',timeout=2).status==200 else 1)"
+    CMD python -c "import os,urllib.request,sys; p=os.environ.get('ROOT_PATH',''); port=os.environ.get('PORT',os.environ.get('STREAMLIT_SERVER_PORT','8501')); sys.exit(0 if urllib.request.urlopen(f'http://localhost:{port}{p}/_stcore/health',timeout=2).status==200 else 1)"
 
-CMD ["sh", "-c", "streamlit run src/metascholar/app/app.py --server.port=$STREAMLIT_SERVER_PORT --server.address=$STREAMLIT_SERVER_ADDRESS --server.baseUrlPath=${ROOT_PATH:-} --server.enableXsrfProtection=false --server.enableCORS=false --server.headless=true"]
+CMD ["sh", "-c", "streamlit run src/metascholar/app/app.py --server.port=${PORT:-$STREAMLIT_SERVER_PORT} --server.address=$STREAMLIT_SERVER_ADDRESS --server.baseUrlPath=${ROOT_PATH:-} --server.enableXsrfProtection=false --server.enableCORS=false --server.headless=true"]

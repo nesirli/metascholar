@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
+from urllib.parse import urlparse
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 
@@ -17,12 +18,33 @@ class Settings(BaseSettings):
     corpus_path: Path = Path("data/corpus.jsonl")
 
     openai_api_key: str
-    postgres_host: str
-    postgres_db: str
-    postgres_user: str
-    postgres_password: str
+    # Railway injects DATABASE_URL for its managed Postgres; individual variables
+    # are used for local development and Docker Compose.
+    database_url: str | None = None
+    postgres_host: str | None = None
+    postgres_db: str | None = None
+    postgres_user: str | None = None
+    postgres_password: str | None = None
     app_username: str
     app_password: str
+
+    def get_postgres_kwargs(self) -> dict:
+        """Return psycopg connection kwargs, preferring DATABASE_URL if set."""
+        if self.database_url:
+            parsed = urlparse(self.database_url)
+            return {
+                "host": parsed.hostname,
+                "dbname": parsed.path.lstrip("/"),
+                "user": parsed.username,
+                "password": parsed.password,
+                "port": parsed.port or 5432,
+            }
+        return {
+            "host": self.postgres_host,
+            "dbname": self.postgres_db,
+            "user": self.postgres_user,
+            "password": self.postgres_password,
+        }
 
 
 @lru_cache

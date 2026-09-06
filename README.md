@@ -9,7 +9,7 @@
 
 ## 🔗 Live demo
 
-**https://nasirnesirli.com/portfolio/metascholar/app**
+**https://metascholar.up.railway.app**
 
 | | |
 |---|---|
@@ -67,7 +67,7 @@ Every answer is also scored by an **LLM-as-a-judge** for relevance, and users ca
 | Corpus ingest | PubMed E-utilities via `httpx` → JSONL |
 | Config | `pydantic-settings` |
 | Packaging | `uv` |
-| Deployment | Docker + Docker Compose (Coolify) |
+| Deployment | Docker + Railway |
 
 ## Getting started
 
@@ -221,13 +221,35 @@ uv run pytest     # corpus parsing + RAG retrieval/context/prompt tests
 
 ## Deployment
 
-Deployed on [Coolify](https://coolify.io) as a Docker Compose stack (Streamlit app + Postgres/pgvector) behind a Traefik reverse proxy at the `/portfolio/metascholar/app` subpath.
+Deployed on [Railway](https://railway.app) as a Docker service connected to a managed PostgreSQL database at **https://metascholar.up.railway.app**.
 
-Notes specific to running Streamlit at a subpath:
+### Deploying to Railway
 
-- Set `ROOT_PATH=/portfolio/metascholar/app` so Streamlit serves under that prefix (`--server.baseUrlPath`) and generates correct asset/WebSocket URLs.
-- The reverse proxy must **not** strip the prefix (in Coolify, turn **off** "Strip Prefixes"). Streamlit needs the full path to reach `baseUrlPath`. See [coolify#2603](https://github.com/coollabsio/coolify/issues/2603).
-- The corpus is gitignored, so after the first deploy run `make get_data` and `make init` inside the app container.
+1. **Create a Railway project** and add a **PostgreSQL** service.
+2. **Add a service** from your GitHub repo (`nesirli/metascholar`). Railway detects the `Dockerfile` automatically.
+3. **Connect the database** to the app service so Railway injects `DATABASE_URL` into the app environment.
+4. **Set required environment variables** in the app service:
+   - `OPENAI_API_KEY`
+   - `APP_USERNAME` (default `admin`)
+   - `APP_PASSWORD` (default `password`)
+5. **Deploy** the app service. The container starts Streamlit on the port provided by Railway's `PORT` variable.
+6. **Initialize the database once.** The corpus is gitignored and built at deploy time. Open a shell in the running app container and run:
+   ```bash
+   make get_data
+   make init
+   ```
+   Or run the equivalent from the Railway CLI:
+   ```bash
+   railway run --service <app-service-name> make get_data
+   railway run --service <app-service-name> make init
+   ```
+   `make init` creates the schema, enables the `pgvector` extension, and embeds the corpus into Postgres (~9,900 OpenAI calls; idempotent and cheap).
+
+### Notes
+
+- The app reads `DATABASE_URL` when available and falls back to individual `POSTGRES_*` variables for local development.
+- `ROOT_PATH` is optional. Leave it unset for a root-domain deployment like `metascholar.up.railway.app`; set it only if you run Streamlit behind a reverse proxy under a subpath.
+- Railway's `PORT` variable takes precedence over the local default `8501`.
 
 ## Project structure
 

@@ -26,12 +26,7 @@ def embed(text: str, model: str = "text-embedding-3-small") -> list[float]:
 
 
 def get_db_connection():
-    return psycopg.connect(
-        host=settings.postgres_host,
-        dbname=settings.postgres_db,
-        user=settings.postgres_user,
-        password=settings.postgres_password,
-    )
+    return psycopg.connect(**settings.get_postgres_kwargs())
 
 
 def init_db():

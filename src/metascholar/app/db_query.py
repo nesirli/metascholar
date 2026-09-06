@@ -45,12 +45,7 @@ def pg_vector_search(query: str, top_k: int = 5) -> list[dict]:
 
 def _get_conn():
     """Create a new database connection using settings from config."""
-    return psycopg.connect(
-        host=settings.postgres_host,
-        dbname=settings.postgres_db,
-        user=settings.postgres_user,
-        password=settings.postgres_password,
-    )
+    return psycopg.connect(**settings.get_postgres_kwargs())
 
 
 @dataclass
