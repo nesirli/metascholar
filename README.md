@@ -233,17 +233,19 @@ Deployed on [Railway](https://railway.app) as a Docker service connected to a ma
    - `APP_USERNAME` (default `admin`)
    - `APP_PASSWORD` (default `password`)
 5. **Deploy** the app service. The container starts Streamlit on the port provided by Railway's `PORT` variable.
-6. **Initialize the database once.** The corpus is gitignored and built at deploy time. Open a shell in the running app container and run:
+6. **Initialize the database once.** The corpus is gitignored and built at deploy time. Open a shell **via the Railway dashboard** for the running app service (this ensures `DATABASE_URL` and other env vars are present) and run:
    ```bash
    make get_data
    make init
    ```
-   Or run the equivalent from the Railway CLI:
+   Or use the Railway CLI from the linked service:
    ```bash
-   railway run --service <app-service-name> make get_data
-   railway run --service <app-service-name> make init
+   railway run make get_data
+   railway run make init
    ```
    `make init` creates the schema, enables the `pgvector` extension, and embeds the corpus into Postgres (~9,900 OpenAI calls; idempotent and cheap).
+
+   If you see `No Postgres configuration found`, the shell/command does not have the Railway environment variables. Use the Railway dashboard shell or `railway run` instead of `docker exec`.
 
 ### Notes
 

@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 
@@ -32,13 +32,24 @@ class Settings(BaseSettings):
         """Return psycopg connection kwargs, preferring DATABASE_URL if set."""
         if self.database_url:
             parsed = urlparse(self.database_url)
-            return {
+            query = parse_qs(parsed.query)
+            kwargs = {
                 "host": parsed.hostname,
                 "dbname": parsed.path.lstrip("/"),
                 "user": parsed.username,
                 "password": parsed.password,
                 "port": parsed.port or 5432,
             }
+            if "sslmode" in query:
+                kwargs["sslmode"] = query["sslmode"][0]
+            return kwargs
+
+        if not self.postgres_host:
+            raise ValueError(
+                "No Postgres configuration found. Set DATABASE_URL (Railway) "
+                "or POSTGRES_HOST/POSTGRES_DB/POSTGRES_USER/POSTGRES_PASSWORD."
+            )
+
         return {
             "host": self.postgres_host,
             "dbname": self.postgres_db,
