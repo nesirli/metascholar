@@ -9,7 +9,7 @@
 
 ## 🔗 Live demo
 
-**https://metascholar.up.railway.app**
+**https://portfolio.nasirnesirli.com/metascholar**
 
 | | |
 |---|---|
