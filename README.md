@@ -13,8 +13,8 @@
 
 | | |
 |---|---|
-| **Username** | `admin` |
-| **Password** | `password` |
+| **Username** | `demo` |
+| **Password** | `metascholar2026` |
 
 > A public demo with shared credentials, so please don't rely on it for anything private.
 
