@@ -21,7 +21,7 @@ def check_auth():
     _, center, _ = st.columns([1, 2, 1])
     with center:
         with st.container(border=True):
-            username = st.text_input("Username", placeholder="admin")
+            username = st.text_input("Username", placeholder="demo")
             password = st.text_input("Password", type="password", placeholder="••••••••")
             if st.button("Login", use_container_width=True):
                 if username == settings.app_username and password == settings.app_password:
