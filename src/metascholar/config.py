@@ -18,8 +18,8 @@ class Settings(BaseSettings):
     corpus_path: Path = Path("data/corpus.jsonl")
 
     openai_api_key: str
-    # Railway injects DATABASE_URL for its managed Postgres; individual variables
-    # are used for local development and Docker Compose.
+    # Hosted platforms (e.g. Dokploy) provide DATABASE_URL; individual variables
+    # are used for local development.
     database_url: str | None = None
     postgres_host: str | None = None
     postgres_db: str | None = None
@@ -31,9 +31,9 @@ class Settings(BaseSettings):
     def get_postgres_kwargs(self) -> dict:
         """Return psycopg connection kwargs.
 
-        Explicit POSTGRES_* variables take precedence so existing Coolify
-        deployments keep working even if the platform also injects DATABASE_URL.
-        If only DATABASE_URL is set (Railway's default), use that.
+        Explicit POSTGRES_* variables take precedence, so deployments that set
+        them keep working even if the platform also injects DATABASE_URL.
+        If only DATABASE_URL is set (the usual hosted case), use that.
         """
         if self.postgres_host:
             return {
@@ -58,7 +58,7 @@ class Settings(BaseSettings):
             return kwargs
 
         raise ValueError(
-            "No Postgres configuration found. Set DATABASE_URL (Railway) "
+            "No Postgres configuration found. Set DATABASE_URL "
             "or POSTGRES_HOST/POSTGRES_DB/POSTGRES_USER/POSTGRES_PASSWORD."
         )
 

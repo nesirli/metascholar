@@ -67,7 +67,7 @@ Every answer is also scored by an **LLM-as-a-judge** for relevance, and users ca
 | Corpus ingest | PubMed E-utilities via `httpx` → JSONL |
 | Config | `pydantic-settings` |
 | Packaging | `uv` |
-| Deployment | Docker + Railway |
+| Deployment | Docker + Dokploy |
 
 ## Getting started
 
@@ -75,7 +75,7 @@ Every answer is also scored by an **LLM-as-a-judge** for relevance, and users ca
 
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/)
-- Docker (for Postgres + pgvector)
+- Docker (for Postgres + pgvector locally)
 - An OpenAI API key
 
 ### 1. Install & configure
@@ -102,7 +102,13 @@ APP_PASSWORD=password
 ### 2. Start Postgres (pgvector)
 
 ```bash
-docker compose up -d postgres
+docker run -d --name metascholar-postgres \
+  -e POSTGRES_DB=metascholar \
+  -e POSTGRES_USER=user \
+  -e POSTGRES_PASSWORD=password \
+  -p 5432:5432 \
+  -v metascholar-pgdata:/var/lib/postgresql/data \
+  pgvector/pgvector:pg17
 ```
 
 ### 3. Fetch the corpus and build the index
@@ -221,37 +227,100 @@ uv run pytest     # corpus parsing + RAG retrieval/context/prompt tests
 
 ## Deployment
 
-Deployed on [Railway](https://railway.app) as a Docker service connected to a managed PostgreSQL database at **https://metascholar.up.railway.app**.
+The repo ships a single `Dockerfile` and no Compose file, so it deploys as a
+normal **Application** on a self-hosted [Dokploy](https://dokploy.com) instance,
+with Postgres + pgvector running as a separate Dokploy **Database** service.
 
-### Deploying to Railway
+### Prerequisites
 
-1. **Create a Railway project** and add a **PostgreSQL** service.
-2. **Add a service** from your GitHub repo (`nesirli/metascholar`). Railway detects the `Dockerfile` automatically.
-3. **Connect the database** to the app service so Railway injects `DATABASE_URL` into the app environment.
-4. **Set required environment variables** in the app service:
-   - `OPENAI_API_KEY`
-   - `APP_USERNAME` (default `admin`)
-   - `APP_PASSWORD` (default `password`)
-5. **Deploy** the app service. The container starts Streamlit on the port provided by Railway's `PORT` variable.
-6. **Initialize the database once.** The corpus is gitignored and built at deploy time. Open a shell **via the Railway dashboard** for the running app service (this ensures `DATABASE_URL` and other env vars are present) and run:
-   ```bash
-   make get_data
-   make init
-   ```
-   Or use the Railway CLI from the linked service:
-   ```bash
-   railway run make get_data
-   railway run make init
-   ```
-   `make init` creates the schema, enables the `pgvector` extension, and embeds the corpus into Postgres (~9,900 OpenAI calls; idempotent and cheap).
+- A running Dokploy instance with a domain pointed at it.
+- A Git provider connected to Dokploy (GitHub, GitLab, Gitea, …) or a public repo URL.
+- An OpenAI API key.
 
-   If you see `No Postgres configuration found`, the shell/command does not have the Railway environment variables. Use the Railway dashboard shell or `railway run` instead of `docker exec`.
+### 1. Create the Postgres + pgvector database
+
+1. In your Dokploy project: **Create Service → Database → PostgreSQL**.
+2. Name it e.g. `metascholar-db` and create it.
+3. Open the database → **Advanced → Custom Docker Image** and set it to
+   `pgvector/pgvector:pg17` (the stock Postgres image does not include the
+   `pgvector` extension). Save and redeploy the database.
+4. Open **Connection** and copy the **Internal Connection URL**
+   (`postgres://user:password@metascholar-db:5432/...`). You'll need it in step 3.
+
+### 2. Create the application
+
+1. In the same project: **Create Service → Application**.
+2. Connect the Git provider / repo and pick the branch (e.g. `main`).
+3. Set **Build Type → Dockerfile**:
+   - **Dockerfile Path**: `Dockerfile`
+   - **Docker Context Path**: `.`
+   - **Docker Build Stage**: leave empty
+4. Deploy once to build the image.
+
+### 3. Set environment variables
+
+Application → **Environment**:
+
+```env
+DATABASE_URL=postgres://user:password@metascholar-db:5432/metascholar
+OPENAI_API_KEY=sk-...
+APP_USERNAME=admin
+APP_PASSWORD=change-me
+AUTO_INIT=true
+```
+
+Leave `POSTGRES_HOST` unset so `DATABASE_URL` is used (setting it overrides
+`DATABASE_URL`). `AUTO_INIT=true` bootstraps the corpus on first boot (step 6).
+
+### 4. Add a persistent volume for the corpus
+
+Application → **Advanced → Volumes → Add Volume**, mount path **`/app/data`**.
+
+The corpus (`data/corpus.jsonl`) is downloaded at runtime, not baked into the
+image, so this volume keeps it across redeploys.
+
+### 5. Add a domain
+
+Application → **Domains → Add Domain**:
+
+- **Host**: `metascholar.example.com`
+- **Path**: `/` (root deployment) — leave `ROOT_PATH` unset.
+- **Container Port**: `8501`
+- **HTTPS**: on
+
+For a **sub-path** deployment (e.g. `https://example.com/metascholar`): set
+**Path** to `/metascholar`, leave **Strip Path** *off*, and add the env var
+`ROOT_PATH=/metascholar`. Streamlit emits absolute URLs under its
+`baseUrlPath`, so the proxy must not strip the prefix.
+
+### 6. Initialize the corpus and index
+
+**Option A — automatic (recommended).** With `AUTO_INIT=true`, the container
+waits for Postgres, fetches ~9,900 PubMed abstracts (`make get_data`), embeds
+them into Postgres (`make init`), then starts Streamlit. Follow progress in the
+application's **Logs** tab. This runs only once; later restarts detect the
+populated `articles` table and skip it.
+
+**Option B — manual.** Leave `AUTO_INIT=false` and run once from
+Application → **Advanced → Run Command**:
+
+```bash
+make get_data && make init
+```
+
+`make init` is idempotent, so it is safe to re-run.
+
+### 7. Updates
+
+Push to the connected branch (or hit **Redeploy**). The `/app/data` volume and
+the database persist across deployments.
 
 ### Notes
 
-- The app reads `DATABASE_URL` when available and falls back to individual `POSTGRES_*` variables for local development.
-- `ROOT_PATH` is optional. Leave it unset for a root-domain deployment like `metascholar.up.railway.app`; set it only if you run Streamlit behind a reverse proxy under a subpath.
-- Railway's `PORT` variable takes precedence over the local default `8501`.
+- The image builds from the committed `uv.lock`. The entrypoint briefly runs as root to fix the mounted volume's ownership, then drops to the non-root `appuser` (uid `10001`) for the app and bootstrap commands.
+- The app listens on `8501` by default; the domain's **Container Port** must match. `PORT` overrides it if needed.
+- Healthcheck hits `/_stcore/health` under `ROOT_PATH`.
+- `No Postgres configuration found` in the logs means neither `DATABASE_URL` nor the `POSTGRES_*` variables are set on the application.
 
 ## Project structure
 
