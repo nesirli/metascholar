@@ -9,7 +9,7 @@
 
 ## 🔗 Live demo
 
-**https://portfolio.nasirnesirli.com/metascholar**
+**https://metascholar.nasirnesirli.com**
 
 | | |
 |---|---|
